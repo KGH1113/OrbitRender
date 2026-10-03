@@ -96,9 +96,22 @@ namespace OrbitRender.UI
             }, dark);
         }
 
-        internal static VideoEncoder DrawEncoder(VideoEncoder value, bool dark = false)
+        internal static VideoEncoder DrawEncoder(VideoEncoder value, VideoCodec codec, bool dark = false)
         {
             GUILayout.Label(Localization.Get("video-encoder"), dark ? UiTheme.Label : GUI.skin.label);
+            if (codec == VideoCodec.ProRes)
+            {
+                var platform = Application.platform;
+                var macOS = platform == RuntimePlatform.OSXPlayer || platform == RuntimePlatform.OSXEditor;
+                var selectedProRes = value == VideoEncoder.Software ? (macOS ? 2 : 1)
+                    : value == VideoEncoder.AppleVideoToolbox && macOS ? 1 : 0;
+                selectedProRes = DrawToolbar(selectedProRes, macOS
+                    ? new[] { Localization.Get("auto"), "Apple VideoToolbox", Localization.Get("software") }
+                    : new[] { Localization.Get("auto"), Localization.Get("software") }, dark);
+                return selectedProRes == 0 ? VideoEncoder.Auto
+                    : selectedProRes == 1 && macOS ? VideoEncoder.AppleVideoToolbox
+                    : VideoEncoder.Software;
+            }
             var selected = value == VideoEncoder.Auto ? 0
                 : value == VideoEncoder.NvidiaNvenc ? 1
                 : value == VideoEncoder.IntelQsv ? 2
@@ -122,7 +135,17 @@ namespace OrbitRender.UI
         {
             GUILayout.Label(Localization.Get("video-codec"), dark ? UiTheme.Label : GUI.skin.label);
             return (VideoCodec)DrawToolbar((int)value,
-                new[] { "H.264", "H.265", "VP9", "AV1" }, dark);
+                new[] { "H.264", "H.265", "VP9", "AV1", "ProRes" }, dark);
+        }
+
+        internal static ProResProfile DrawProResProfile(ProResProfile value, bool dark = false)
+        {
+            GUILayout.Label(Localization.Get("prores-profile"), dark ? UiTheme.Label : GUI.skin.label);
+            var selected = GUILayout.SelectionGrid((int)ProResProfiles.Normalize(value),
+                new[] { "Proxy", "LT", "Standard", "HQ", "4444", "4444 XQ" }, 3,
+                dark ? UiTheme.Toolbar : GUI.skin.button);
+            GUILayout.Label(Localization.Get("prores-profile-note"), dark ? UiTheme.Label : GUI.skin.label);
+            return (ProResProfile)selected;
         }
 
         internal static VideoBitDepth DrawBitDepth(VideoBitDepth value, bool dark = false)

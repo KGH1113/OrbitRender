@@ -238,7 +238,8 @@ namespace OrbitRender.Renderer
                 requestOptions?.VideoCodec ?? rpcOptions?.VideoCodec,
                 requestOptions?.BitDepth ?? rpcOptions?.BitDepth,
                 requestOptions?.Encoding,
-                requestOptions?.Encoder);
+                requestOptions?.Encoder,
+                requestOptions?.ProResProfile ?? rpcOptions?.ProResProfile);
             Clock = new RenderClock(profile.TargetFps);
             AudioSchedulePatch.ResetRuntimeState();
             Message = Localization.FormatWithCurrentCulture("preparing-render", profile.Width, profile.Height, profile.TargetFps, profile.VideoFps, profile.BitrateMbps, profile.FfmpegCodec);
@@ -277,7 +278,8 @@ namespace OrbitRender.Renderer
                 {
                     var success = FFmpegEncoder.TryValidateVideo(executable, checkProfile.BitrateMbps,
                         checkProfile.FfmpegPreset, checkProfile.FfmpegCodec, checkProfile.PixelFormat,
-                        checkProfile.ContainerExtension, !captureAudioForRun, out var error);
+                        checkProfile.ContainerExtension, !captureAudioForRun, out var error,
+                        checkProfile.ProResProfile);
                     encoderPreflightResults.Enqueue(new EncoderPreflightResult(success, error));
                 }
                 catch (Exception ex)
@@ -338,7 +340,7 @@ namespace OrbitRender.Renderer
             var definition = VideoCodecCatalog.Get(profile.VideoCodec);
             profile = new RenderProfile(profile.Width, profile.Height, profile.TargetFps, profile.VideoFps, profile.BitrateMbps,
                 profile.FfmpegPreset, profile.EndDelaySeconds, definition.SoftwareEncoder,
-                profile.VideoCodec, profile.BitDepth);
+                profile.VideoCodec, profile.BitDepth, profile.ProResProfile);
             encoderFallbackPending = false;
             encoderFallbackReason = null;
             State = RenderState.Preparing;
@@ -469,7 +471,10 @@ namespace OrbitRender.Renderer
             MaximizeRenderPerformance();
             encoder = new FFmpegEncoder(FFmpegPath, partialPath, profile.Width, profile.Height,
                 profile.VideoFps, profile.BitrateMbps, profile.FfmpegPreset, !captureAudioForRun,
-                profile.FfmpegCodec, profile.PixelFormat, FrameCapture.SelectRawPixelFormat());
+                profile.FfmpegCodec, profile.PixelFormat,
+                profile.VideoCodec == VideoCodec.ProRes && ProResProfiles.HasAlpha(profile.ProResProfile)
+                    ? RawVideoPixelFormat.Rgba32 : FrameCapture.SelectRawPixelFormat(),
+                profile.ProResProfile);
             if (editor != null)
             {
                 Main.Entry.Logger.Log("Preparing editor render: playMode=" + editor.playMode

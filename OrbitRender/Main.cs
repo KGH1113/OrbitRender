@@ -299,10 +299,15 @@ namespace OrbitRender
 
         private static void DrawEncodingSettings()
         {
-            Settings.Encoding = SettingsUi.DrawEncoding(Settings.Encoding);
-            Settings.Encoder = SettingsUi.DrawEncoder(Settings.Encoder);
             Settings.Codec = SettingsUi.DrawCodec(Settings.Codec);
-            Settings.BitDepth = SettingsUi.DrawBitDepth(Settings.BitDepth);
+            Settings.Encoder = SettingsUi.DrawEncoder(Settings.Encoder, Settings.Codec);
+            if (Settings.Codec == VideoCodec.ProRes)
+                Settings.ProResProfile = SettingsUi.DrawProResProfile(Settings.ProResProfile);
+            else
+            {
+                Settings.Encoding = SettingsUi.DrawEncoding(Settings.Encoding);
+                Settings.BitDepth = SettingsUi.DrawBitDepth(Settings.BitDepth);
+            }
         }
 
         private static void DrawPathSettings()

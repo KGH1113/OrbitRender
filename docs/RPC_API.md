@@ -105,9 +105,10 @@ Exactly one of `levelPath` or the compatibility alias `path` must provide a vali
 | `videoFps` | integer | No | `15..240` | Final output video FPS |
 | `bitrateMbps` | integer | No | `1..200` | CBR video bitrate in Mbps |
 | `bitrate` | integer | No | `1..200` | Alias for `bitrateMbps` |
-| `videoCodec` | string | No | `H264`, `H265`, `VP9`, `AV1` | Video codec; VP9 produces WebM and the others produce MP4 |
+| `videoCodec` | string | No | `H264`, `H265`, `VP9`, `AV1`, `ProRes` | Video codec; VP9 produces WebM, ProRes produces MOV, and the others produce MP4 |
 | `codec` | string | No | Same as `videoCodec` | Compatibility alias for `videoCodec` |
-| `bitDepth` | integer | No | `8` or `10` | Output video bit depth; `10` uses `yuv420p10le` |
+| `proResProfile` | string | No | `Proxy`, `LT`, `Standard`, `HQ`, `4444`, `4444 XQ` | ProRes profile; defaults to the saved setting (HQ initially) |
+| `bitDepth` | integer | No | `8` or `10` | Output video bit depth; `10` uses `yuv420p10le`; ignored for ProRes |
 | `endDelaySeconds` | number | No | `0..30` | Delay after the music/final-tile end time |
 | `captureAudio` | boolean | No | `true` / `false` | Capture game audio |
 | `audio` | boolean | No | `true` / `false` | Alias for `captureAudio` |

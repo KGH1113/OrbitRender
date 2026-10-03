@@ -34,6 +34,7 @@ namespace OrbitRender.Renderer
         public bool? ShowHitJudgments;
         public VideoCodec? VideoCodec;
         public VideoBitDepth? BitDepth;
+        public ProResProfile? ProResProfile;
 
         public bool HasValues
         {
@@ -42,7 +43,7 @@ namespace OrbitRender.Renderer
                 || ShowPlanetRings.HasValue
                 || ShowSongTitle.HasValue || ShowCountdown.HasValue || ShowResultText.HasValue
                 || ShowHitJudgments.HasValue
-                || VideoCodec.HasValue || BitDepth.HasValue; }
+                || VideoCodec.HasValue || BitDepth.HasValue || ProResProfile.HasValue; }
         }
 
         public object Snapshot()
@@ -65,7 +66,8 @@ namespace OrbitRender.Renderer
                 showResultText = ShowResultText,
                 showHitJudgments = ShowHitJudgments,
                 videoCodec = VideoCodec.HasValue ? VideoCodec.Value.ToString() : null,
-                bitDepth = BitDepth.HasValue ? (int)(BitDepth.Value == VideoBitDepth.Ten ? 10 : 8) : (int?)null
+                bitDepth = BitDepth.HasValue ? (int)(BitDepth.Value == VideoBitDepth.Ten ? 10 : 8) : (int?)null,
+                proResProfile = ProResProfile.HasValue ? ProResProfiles.DisplayName(ProResProfile.Value) : null
             };
         }
     }
@@ -420,7 +422,7 @@ namespace OrbitRender.Renderer
             {
                 if (!VideoCodecCatalog.TryParse(payload.VideoCodec, out var parsedCodec))
                 {
-                    error = "Unknown videoCodec. Use H264, H265, VP9, or AV1.";
+                    error = "Unknown videoCodec. Use H264, H265, VP9, AV1, or ProRes.";
                     return null;
                 }
                 primaryCodec = parsedCodec;
@@ -429,7 +431,7 @@ namespace OrbitRender.Renderer
             {
                 if (!VideoCodecCatalog.TryParse(payload.Codec, out var parsedAliasCodec))
                 {
-                    error = "Unknown codec. Use H264, H265, VP9, or AV1.";
+                    error = "Unknown codec. Use H264, H265, VP9, AV1, or ProRes.";
                     return null;
                 }
                 aliasCodec = parsedAliasCodec;
@@ -450,6 +452,16 @@ namespace OrbitRender.Renderer
                 }
                 bitDepth = payload.BitDepth.Value == 10 ? VideoBitDepth.Ten : VideoBitDepth.Eight;
             }
+            ProResProfile? proResProfile = null;
+            if (!string.IsNullOrWhiteSpace(payload.ProResProfile))
+            {
+                if (!ProResProfiles.TryParse(payload.ProResProfile, out var parsedProfile))
+                {
+                    error = "Unknown proResProfile. Use Proxy, LT, Standard, HQ, 4444, or 4444 XQ.";
+                    return null;
+                }
+                proResProfile = parsedProfile;
+            }
             var options = new RpcRenderOptions {
                 Preset = preset,
                 Width = payload.Width,
@@ -466,7 +478,8 @@ namespace OrbitRender.Renderer
                 ShowResultText = payload.ShowResultText,
                 ShowHitJudgments = payload.ShowHitJudgments,
                 VideoCodec = videoCodec,
-                BitDepth = bitDepth
+                BitDepth = bitDepth,
+                ProResProfile = proResProfile
             };
             return options.HasValues ? options : null;
         }
@@ -557,6 +570,7 @@ namespace OrbitRender.Renderer
             [JsonProperty("videoCodec")] public string VideoCodec { get; set; }
             [JsonProperty("codec")] public string Codec { get; set; }
             [JsonProperty("bitDepth")] public int? BitDepth { get; set; }
+            [JsonProperty("proResProfile")] public string ProResProfile { get; set; }
             [JsonProperty("captureAudio")] public bool? CaptureAudio { get; set; }
             [JsonProperty("audio")] public bool? Audio { get; set; }
         }

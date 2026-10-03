@@ -73,13 +73,14 @@ namespace OrbitRender.Renderer
                 RawVideoPixelFormat.Rgba32) { }
 
         internal FFmpegEncoder(string executable, string output, int width, int height, int fps, int bitrateMbps,
-            string preset, bool fastStart, string codec, string pixelFormat, RawVideoPixelFormat rawPixelFormat)
+            string preset, bool fastStart, string codec, string pixelFormat, RawVideoPixelFormat rawPixelFormat,
+            ProResProfile proResProfile = ProResProfile.HQ)
             : this(executable, output, width, height, fps, bitrateMbps, preset, false, fastStart, codec, pixelFormat,
-                rawPixelFormat) { }
+                rawPixelFormat, proResProfile) { }
 
         private FFmpegEncoder(string executable, string output, int width, int height, int fps, int bitrateMbps,
             string preset, bool legacyCrf, bool fastStart, string codec, string pixelFormat,
-            RawVideoPixelFormat rawPixelFormat)
+            RawVideoPixelFormat rawPixelFormat, ProResProfile proResProfile = ProResProfile.HQ)
         {
             if (string.IsNullOrWhiteSpace(executable)) throw new FileNotFoundException("FFmpeg executable was not configured.");
             if (LooksLikeFilePath(executable) && !File.Exists(executable))
@@ -88,13 +89,19 @@ namespace OrbitRender.Renderer
                 throw new ArgumentOutOfRangeException();
             if (string.IsNullOrEmpty(preset)) preset = "fast";
             if (string.IsNullOrEmpty(codec)) codec = "libx264";
-            if (!string.Equals(pixelFormat, "yuv420p10le", StringComparison.OrdinalIgnoreCase)) pixelFormat = "yuv420p";
+            proResProfile = ProResProfiles.Normalize(proResProfile);
+            var videoToolboxProRes = string.Equals(codec, "prores_videotoolbox", StringComparison.OrdinalIgnoreCase);
+            var softwareProRes = string.Equals(codec, "prores_ks", StringComparison.OrdinalIgnoreCase);
+            if (videoToolboxProRes)
+                pixelFormat = ProResProfiles.HasAlpha(proResProfile) ? "bgra" : "p210le";
+            else if (softwareProRes)
+                pixelFormat = ProResProfiles.HasAlpha(proResProfile) ? "yuva444p10le" : "yuv422p10le";
+            else if (!string.Equals(pixelFormat, "yuv420p10le", StringComparison.OrdinalIgnoreCase))
+                pixelFormat = "yuv420p";
             if (!Enum.IsDefined(typeof(RawVideoPixelFormat), rawPixelFormat))
                 rawPixelFormat = RawVideoPixelFormat.Rgba32;
             this.rawPixelFormat = rawPixelFormat;
-            bool isHardwareEncoder = codec.EndsWith("_nvenc", StringComparison.OrdinalIgnoreCase)
-                || codec.EndsWith("_qsv", StringComparison.OrdinalIgnoreCase)
-                || codec.EndsWith("_amf", StringComparison.OrdinalIgnoreCase);
+            bool isHardwareEncoder = VideoCodecCatalog.IsHardwareEncoder(codec);
             var frameByteCount = checked(width * height * BytesPerPixel);
             FrameByteCount = frameByteCount;
             // Readback and encoding share this pool. Keep enough frames in flight
@@ -117,7 +124,8 @@ namespace OrbitRender.Renderer
                     ? "-crf 30 -b:v 0"
                     : "-b:v " + bitrateMbps + "M";
             }
-            var encoderOptions = BuildEncoderOptions(codec, preset, rateControl, isHardwareEncoder, pixelFormat);
+            var encoderOptions = BuildEncoderOptions(codec, preset, rateControl, isHardwareEncoder, pixelFormat,
+                proResProfile);
             process = new Process { StartInfo = new ProcessStartInfo {
                 FileName = executable,
                 Arguments = "-hide_banner -loglevel warning -nostdin -n -f rawvideo -pixel_format "
@@ -204,9 +212,13 @@ namespace OrbitRender.Renderer
         }
 
         private static string BuildEncoderOptions(string codec, string preset, string rateControl,
-            bool isHardwareEncoder, string pixelFormat)
+            bool isHardwareEncoder, string pixelFormat, ProResProfile proResProfile)
         {
             var normalized = (codec ?? string.Empty).Trim().ToLowerInvariant();
+            if (normalized == "prores_videotoolbox")
+                return "-c:v prores_videotoolbox -profile:v " + (int)proResProfile + " -allow_sw 0";
+            if (normalized == "prores_ks")
+                return "-c:v prores_ks -profile:v " + (int)proResProfile + " -threads 0";
             var tenBitHevc = string.Equals(pixelFormat, "yuv420p10le", StringComparison.Ordinal)
                 && (normalized == "libx265" || normalized == "hevc_nvenc"
                     || normalized == "hevc_qsv" || normalized == "hevc_amf");
@@ -260,7 +272,8 @@ namespace OrbitRender.Renderer
         }
 
         internal static bool TryValidateVideo(string executable, int bitrateMbps, string preset, string codec,
-            string pixelFormat, string extension, bool legacyCrf, out string error)
+            string pixelFormat, string extension, bool legacyCrf, out string error,
+            ProResProfile proResProfile = ProResProfile.HQ)
         {
             error = null;
             string output;
@@ -281,7 +294,7 @@ namespace OrbitRender.Renderer
                 // reject tiny 128x128 surfaces before testing any real frame.
                 using (var encoder = new FFmpegEncoder(executable, output, 320, 180, 30,
                     Math.Max(1, bitrateMbps), preset, legacyCrf, false, codec, pixelFormat,
-                    RawVideoPixelFormat.Rgba32))
+                    RawVideoPixelFormat.Rgba32, proResProfile))
                 {
                     var frame = encoder.Rent();
                     frame.Index = 0;
@@ -408,7 +421,10 @@ namespace OrbitRender.Renderer
                 FileName = executable, UseShellExecute = false, CreateNoWindow = true,
                 RedirectStandardError = true,
                 Arguments = "-hide_banner -loglevel error -nostdin -n -i \"" + video + "\" -i \"" + audio
-                    + "\" -map 0:v:0 -map 1:a:0 -c:v copy -c:a copy -movflags +faststart -shortest \""
+                    // AAC packet rounding can make the audio stream a fraction
+                    // shorter than the video. -shortest would drop the last
+                    // video frame even though the render clock produced it.
+                    + "\" -map 0:v:0 -map 1:a:0 -c:v copy -c:a copy -movflags +faststart \""
                     + output + "\""
             }})
             {

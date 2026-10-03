@@ -7,7 +7,8 @@ namespace OrbitRender
         H264,
         H265,
         VP9,
-        AV1
+        AV1,
+        ProRes
     }
 
     public enum VideoBitDepth
@@ -24,14 +25,65 @@ namespace OrbitRender
         // do not silently change from software encoding to another backend.
         Software = 2,
         IntelQsv = 3,
-        AmdAmf = 4
+        AmdAmf = 4,
+        AppleVideoToolbox = 5
+    }
+
+    public enum ProResProfile
+    {
+        Proxy = 0,
+        LT = 1,
+        Standard = 2,
+        HQ = 3,
+        FourFourFourFour = 4,
+        FourFourFourFourXQ = 5
+    }
+
+    internal static class ProResProfiles
+    {
+        internal static ProResProfile Normalize(ProResProfile profile)
+        {
+            return Enum.IsDefined(typeof(ProResProfile), profile) ? profile : ProResProfile.HQ;
+        }
+
+        internal static bool HasAlpha(ProResProfile profile)
+        {
+            return profile == ProResProfile.FourFourFourFour || profile == ProResProfile.FourFourFourFourXQ;
+        }
+
+        internal static string DisplayName(ProResProfile profile)
+        {
+            switch (profile)
+            {
+                case ProResProfile.Proxy: return "Proxy";
+                case ProResProfile.LT: return "LT";
+                case ProResProfile.Standard: return "Standard";
+                case ProResProfile.FourFourFourFour: return "4444";
+                case ProResProfile.FourFourFourFourXQ: return "4444 XQ";
+                default: return "HQ";
+            }
+        }
+
+        internal static bool TryParse(string value, out ProResProfile profile)
+        {
+            switch ((value ?? string.Empty).Trim().ToLowerInvariant().Replace(" ", ""))
+            {
+                case "proxy": profile = ProResProfile.Proxy; return true;
+                case "lt": profile = ProResProfile.LT; return true;
+                case "standard": profile = ProResProfile.Standard; return true;
+                case "hq": profile = ProResProfile.HQ; return true;
+                case "4444": profile = ProResProfile.FourFourFourFour; return true;
+                case "4444xq": case "xq": profile = ProResProfile.FourFourFourFourXQ; return true;
+                default: profile = ProResProfile.HQ; return false;
+            }
+        }
     }
 
     internal sealed class VideoCodecDefinition
     {
         internal VideoCodecDefinition(VideoCodec codec, string displayName, string softwareEncoder,
             string nvidiaEncoder, string intelEncoder, string amdEncoder, string extension,
-            string mimeType, string audioEncoder, string audioBitrate)
+            string mimeType, string audioEncoder, string audioBitrate, string appleEncoder = null)
         {
             Codec = codec;
             DisplayName = displayName;
@@ -39,6 +91,7 @@ namespace OrbitRender
             NvidiaEncoder = nvidiaEncoder;
             IntelEncoder = intelEncoder;
             AmdEncoder = amdEncoder;
+            AppleEncoder = appleEncoder;
             ContainerExtension = extension;
             MimeType = mimeType;
             AudioEncoder = audioEncoder;
@@ -51,13 +104,18 @@ namespace OrbitRender
         internal string NvidiaEncoder { get; }
         internal string IntelEncoder { get; }
         internal string AmdEncoder { get; }
+        internal string AppleEncoder { get; }
         internal string ContainerExtension { get; }
         internal string MimeType { get; }
         internal string AudioEncoder { get; }
         internal string AudioBitrate { get; }
 
-        internal string ResolveEncoder(VideoEncoder backend, bool nvidiaGpu, bool intelGpu, bool amdGpu)
+        internal string ResolveEncoder(VideoEncoder backend, bool nvidiaGpu, bool intelGpu, bool amdGpu,
+            bool appleVideoToolbox = false)
         {
+            if ((backend == VideoEncoder.AppleVideoToolbox
+                || (backend == VideoEncoder.Auto && appleVideoToolbox))
+                && !string.IsNullOrEmpty(AppleEncoder)) return AppleEncoder;
             if (backend == VideoEncoder.NvidiaNvenc || (backend == VideoEncoder.Auto && nvidiaGpu))
             {
                 if (!string.IsNullOrEmpty(NvidiaEncoder)) return NvidiaEncoder;
@@ -88,6 +146,9 @@ namespace OrbitRender
         private static readonly VideoCodecDefinition AV1 = new VideoCodecDefinition(
             VideoCodec.AV1, "AV1", "libaom-av1", "av1_nvenc", "av1_qsv", "av1_amf",
             ".mp4", "video/mp4", "aac", "320k");
+        private static readonly VideoCodecDefinition ProRes = new VideoCodecDefinition(
+            VideoCodec.ProRes, "Apple ProRes", "prores_ks", null, null, null,
+            ".mov", "video/quicktime", "aac", "320k", "prores_videotoolbox");
 
         internal static VideoCodecDefinition Get(VideoCodec codec)
         {
@@ -96,6 +157,7 @@ namespace OrbitRender
                 case VideoCodec.H265: return H265;
                 case VideoCodec.VP9: return VP9;
                 case VideoCodec.AV1: return AV1;
+                case VideoCodec.ProRes: return ProRes;
                 case VideoCodec.H264:
                 default: return H264;
             }
@@ -116,7 +178,8 @@ namespace OrbitRender
             return !string.IsNullOrEmpty(codec)
                 && (codec.EndsWith("_nvenc", StringComparison.OrdinalIgnoreCase)
                     || codec.EndsWith("_qsv", StringComparison.OrdinalIgnoreCase)
-                    || codec.EndsWith("_amf", StringComparison.OrdinalIgnoreCase));
+                    || codec.EndsWith("_amf", StringComparison.OrdinalIgnoreCase)
+                    || codec.EndsWith("_videotoolbox", StringComparison.OrdinalIgnoreCase));
         }
 
         internal static bool TryParse(string value, out VideoCodec codec)
@@ -142,6 +205,10 @@ namespace OrbitRender
                 case "av1":
                 case "av01":
                     codec = VideoCodec.AV1;
+                    return true;
+                case "prores":
+                case "prores422":
+                    codec = VideoCodec.ProRes;
                     return true;
                 default:
                     codec = VideoCodec.H264;

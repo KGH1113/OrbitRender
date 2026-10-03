@@ -53,13 +53,16 @@ On startup, the mod checks GitHub's latest stable release. Drafts and pre-releas
 | Show result text | On | Include only the completion/Pure Perfect message; judgment details stay hidden |
 | Show hit judgments | Off | Include hit judgment text when tiles are hit |
 | Encoding speed | Quality | Maximum / Balanced / Quality |
-| Video encoder | Auto | Auto / NvidiaNvenc / IntelQsv / AmdAmf / Software |
-| Video codec | H264 | H264 / H265 / VP9 / AV1 |
-| Video bit depth | 8-bit | 8-bit / 10-bit (`yuv420p10le`) |
+| Video encoder | Auto | Auto / NvidiaNvenc / IntelQsv / AmdAmf / Software; ProRes also offers Apple VideoToolbox on macOS |
+| Video codec | H264 | H264 / H265 / VP9 / AV1 / ProRes |
+| ProRes profile | HQ | Proxy / LT / Standard / HQ / 4444 / 4444 XQ |
+| Video bit depth | 8-bit | 8-bit / 10-bit (`yuv420p10le`); ignored for ProRes |
 | Output folder | `Renders` | Relative to the game folder or absolute |
 | FFmpeg executable | Automatic | User-approved install, PATH lookup, or an explicit path |
 
 The software AV1 encoder does not support strict CBR. Audio renders use target-bitrate VBR, while video-only renders use capped CRF.
+
+ProRes produces a `.mov` file. On macOS, Auto selects `prores_videotoolbox` and requires hardware encoding (`-allow_sw 0`); Software selects `prores_ks`. The ProRes profile controls quality and file size, so the bitrate and encoding-speed settings do not apply. ProRes 422 outputs 10-bit 4:2:2; 4444 and 4444 XQ output 12-bit 4:4:4:4. The Unity frame readback is 8-bit, so selecting ProRes does not add source color precision. The 4444 profiles retain the captured alpha channel when present.
 
 Before rendering, the selected encoder is verified with a real one-frame smoke test. If a hardware encoder fails, the renderer asks for consent before using Software for that render; declining leaves the saved setting unchanged and cancels the render.
 

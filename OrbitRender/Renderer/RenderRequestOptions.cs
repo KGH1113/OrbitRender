@@ -24,6 +24,7 @@ namespace OrbitRender.Renderer
         internal VideoEncoder? Encoder;
         internal VideoCodec? VideoCodec;
         internal VideoBitDepth? BitDepth;
+        internal ProResProfile? ProResProfile;
         internal bool? OpenOutputFolder;
         internal int? SelectionStartTile;
         internal int? SelectionEndTile;

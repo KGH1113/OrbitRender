@@ -183,10 +183,15 @@ namespace OrbitRender.UI
             GUILayout.Space(6f);
             if (SettingsUi.DrawSectionHeader(Localization.Get("encoding"), ref encodingExpanded, true))
             {
-                draft.Encoding = SettingsUi.DrawEncoding(draft.Encoding, true);
-                draft.Encoder = SettingsUi.DrawEncoder(draft.Encoder, true);
                 draft.Codec = SettingsUi.DrawCodec(draft.Codec, true);
-                draft.BitDepth = SettingsUi.DrawBitDepth(draft.BitDepth, true);
+                draft.Encoder = SettingsUi.DrawEncoder(draft.Encoder, draft.Codec, true);
+                if (draft.Codec == VideoCodec.ProRes)
+                    draft.ProResProfile = SettingsUi.DrawProResProfile(draft.ProResProfile, true);
+                else
+                {
+                    draft.Encoding = SettingsUi.DrawEncoding(draft.Encoding, true);
+                    draft.BitDepth = SettingsUi.DrawBitDepth(draft.BitDepth, true);
+                }
             }
 
             }
@@ -302,6 +307,7 @@ namespace OrbitRender.UI
             internal VideoEncoder Encoder;
             internal VideoCodec Codec;
             internal VideoBitDepth BitDepth;
+            internal ProResProfile ProResProfile;
 
             internal static Draft From(RendererSettings settings)
             {
@@ -326,7 +332,8 @@ namespace OrbitRender.UI
                     Encoding = settings.Encoding,
                     Encoder = settings.Encoder,
                     Codec = settings.Codec,
-                    BitDepth = settings.BitDepth
+                    BitDepth = settings.BitDepth,
+                    ProResProfile = settings.ProResProfile
                 };
             }
 
@@ -398,6 +405,7 @@ namespace OrbitRender.UI
                     Encoder = Encoder,
                     VideoCodec = Codec,
                     BitDepth = BitDepth,
+                    ProResProfile = ProResProfile,
                     OpenOutputFolder = OpenOutputFolder
                 };
                 options.TargetFps = targetFps;
@@ -436,6 +444,7 @@ namespace OrbitRender.UI
                 settings.Encoder = Encoder;
                 settings.Codec = Codec;
                 settings.BitDepth = BitDepth;
+                settings.ProResProfile = ProResProfile;
                 settings.OpenOutputFolder = OpenOutputFolder;
                 settings.OnChange();
             }

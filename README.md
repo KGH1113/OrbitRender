@@ -59,14 +59,17 @@ Windows, macOS, Linux에서 실행할 수 있도록 플랫폼별 ADOFAI/Unity Mo
 | Show result text | 켜짐 | 완료/Pure Perfect 문구만 포함 (세부 판정 결과는 숨김) |
 | Show hit judgments | 꺼짐 | 타일을 밟을 때 판정 텍스트 표시 |
 | Encoding speed | Quality | Maximum / Balanced / Quality |
-| Video encoder | Auto | Auto / NvidiaNvenc / IntelQsv / AmdAmf / Software |
-| Video codec | H264 | H264 / H265 / VP9 / AV1 |
-| Video bit depth | 8-bit | 8-bit / 10-bit (`yuv420p10le`) |
+| Video encoder | Auto | Auto / NvidiaNvenc / IntelQsv / AmdAmf / Software; macOS의 ProRes는 Apple VideoToolbox도 선택 가능 |
+| Video codec | H264 | H264 / H265 / VP9 / AV1 / ProRes |
+| ProRes 프로파일 | HQ | Proxy / LT / Standard / HQ / 4444 / 4444 XQ |
+| Video bit depth | 8-bit | 8-bit / 10-bit (`yuv420p10le`); ProRes에는 적용되지 않음 |
 | Output folder | `Renders` | 게임 폴더 기준 상대 경로 또는 절대 경로 |
 | Open output folder after render | 켜짐 | 렌더 완료 후 결과 파일이 있는 폴더 열기 |
 | FFmpeg executable | 자동 | 첫 실행 동의 후 설치된 FFmpeg, PATH의 `ffmpeg`, 또는 직접 지정한 경로 |
 
 AV1 소프트웨어 인코더는 엄격한 CBR을 지원하지 않으므로 오디오 포함 렌더에서는 목표 비트레이트 VBR, 무음 렌더에서는 capped-CRF를 사용합니다.
+
+ProRes는 `.mov`로 저장합니다. macOS에서 Auto는 하드웨어 인코딩이 필수인 `prores_videotoolbox`(`-allow_sw 0`)를 사용하고, Software는 `prores_ks`를 사용합니다. ProRes 품질과 파일 크기는 프로파일로 조절하므로 비트레이트와 인코딩 속도 설정은 적용되지 않습니다. 422는 10비트 4:2:2, 4444/4444 XQ는 12비트 4:4:4:4로 출력합니다. Unity 프레임 읽기는 8비트이므로 ProRes를 선택해도 원본 색 정밀도가 늘어나지는 않습니다. 4444 프로파일은 캡처된 알파 채널이 있으면 보존합니다.
 
 렌더 시작 전에 선택한 인코더를 실제 1프레임으로 점검합니다. 하드웨어 인코더가 실패하면 Software encoder로 이번 렌더만 계속할지 확인하며, 동의하지 않으면 설정과 렌더를 변경하지 않고 취소합니다.
 

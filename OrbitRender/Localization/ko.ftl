@@ -141,3 +141,5 @@ ffmpeg-download-size = {0:F1} / {1:F1} MB
 ffmpeg-download-size-unknown = 전체 다운로드 크기를 알 수 없음
 ffmpeg-could-not-be-installed-automatically-value-check = FFmpeg를 자동으로 설치할 수 없습니다: {0}. 로그를 확인하거나 FFmpeg 실행 파일을 직접 지정하세요.
 ffmpeg-installation-was-skipped-set-ffmpeg-executable-m = FFmpeg 설치를 건너뛰었습니다. 실행 파일을 직접 지정하거나 아래에서 설치하세요.
+prores-profile = ProRes 프로파일
+prores-profile-note = ProRes 품질과 파일 크기는 프로파일로 조절합니다. 영상 비트레이트와 비트 깊이 설정은 적용되지 않습니다.

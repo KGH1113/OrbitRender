@@ -31,6 +31,14 @@ internal static class Program
             Assert(VideoCodecCatalog.Get(VideoCodec.H265).ResolveEncoder(VideoEncoder.AmdAmf, true, false, false) == "hevc_amf", "AMD AMF mapping failed.");
             Assert(VideoCodecCatalog.Get(VideoCodec.AV1).ResolveEncoder(VideoEncoder.NvidiaNvenc, false, true, false) == "av1_nvenc", "NVIDIA NVENC mapping failed.");
             Assert(VideoCodecCatalog.Get(VideoCodec.VP9).ResolveEncoder(VideoEncoder.IntelQsv, false, true, false) == "libvpx-vp9", "VP9 software fallback failed.");
+            TestProResMappings();
+            if (string.Equals(Environment.GetEnvironmentVariable("ORBIT_RENDER_TEST_PRORES_ONLY"), "1",
+                StringComparison.Ordinal))
+            {
+                TestProRes(args[0], args[1]);
+                Console.WriteLine("PASS: ProRes profile selection and 422/4444 encoding.");
+                return 0;
+            }
             Assert(FFmpegEncoder.TryValidateVideo(args[0], 2, "ultrafast", "libx265", "yuv420p10le", ".mp4", false, out var preflightError),
                 "10-bit encoder preflight failed: " + preflightError);
             var fast = Path.Combine(args[1], "fast.mp4");
@@ -145,7 +153,8 @@ internal static class Program
                 + offsetMuxed + "\"");
             Assert(offsetMetadata.Contains("duration=1.000000"), "Selection audio offset/duration mismatch.");
             TestVideoCodecs(args[0], args[1]);
-            Console.WriteLine("PASS: four-hour clock, DSP anchoring, pitch/offset, 1080p60/60 frames, repeated-frame grouping, frame order, identical fast/slow video, RGB24/RGBA transport equivalence, failure, cancellation, AAC/Opus mux, concurrent AAC gain/mux, selection audio offset and H.264/H.265/VP9/AV1 codec support.");
+            TestProRes(args[0], args[1]);
+            Console.WriteLine("PASS: four-hour clock, DSP anchoring, pitch/offset, 1080p60/60 frames, repeated-frame grouping, frame order, identical fast/slow video, RGB24/RGBA transport equivalence, failure, cancellation, AAC/Opus mux, concurrent AAC gain/mux, selection audio offset and H.264/H.265/VP9/AV1/ProRes codec support.");
             return 0;
         }
         catch (Exception ex) { Console.Error.WriteLine(ex); return 1; }
@@ -261,6 +270,82 @@ internal static class Program
         var audio = Probe(ResolveProbe(ffmpeg),
             "-v error -select_streams a:0 -show_entries stream=codec_name -of default=noprint_wrappers=1 \"" + muxed + "\"");
         Assert(audio.Contains("codec_name=opus"), "VP9 audio was not muxed as Opus.");
+    }
+
+    private static void TestProResMappings()
+    {
+        var definition = VideoCodecCatalog.Get(VideoCodec.ProRes);
+        Assert(definition.ContainerExtension == ".mov" && definition.MimeType == "video/quicktime",
+            "ProRes container mapping failed.");
+        Assert(definition.ResolveEncoder(VideoEncoder.Auto, false, false, false, true) == "prores_videotoolbox",
+            "Apple VideoToolbox was not selected automatically on macOS.");
+        Assert(definition.ResolveEncoder(VideoEncoder.Software, false, false, false, true) == "prores_ks",
+            "Explicit ProRes software selection failed.");
+        Assert(definition.ResolveEncoder(VideoEncoder.Auto, false, false, false) == "prores_ks",
+            "Non-macOS ProRes did not select software.");
+        Assert(VideoCodecCatalog.IsHardwareEncoder("prores_videotoolbox"),
+            "VideoToolbox was not recognized as a hardware encoder.");
+        Assert(ProResProfiles.TryParse("4444 XQ", out var parsed)
+            && parsed == ProResProfile.FourFourFourFourXQ,
+            "Named ProRes profile parsing failed.");
+    }
+
+    private static void TestProRes(string ffmpeg, string directory)
+    {
+        var probe = ResolveProbe(ffmpeg);
+        foreach (ProResProfile profile in Enum.GetValues(typeof(ProResProfile)))
+        {
+            var output = Path.Combine(directory, "prores-" + (int)profile + ".mov");
+            using (var encoder = new FFmpegEncoder(ffmpeg, output, 320, 180, 30, 18, "fast", false,
+                "prores_ks", "yuv420p", RawVideoPixelFormat.Rgba32, profile))
+            {
+                var frame = encoder.Rent();
+                frame.Index = 0;
+                for (var pixel = 0; pixel < frame.Bytes.Length; pixel += 4)
+                {
+                    frame.Bytes[pixel] = 32;
+                    frame.Bytes[pixel + 1] = 96;
+                    frame.Bytes[pixel + 2] = 160;
+                    frame.Bytes[pixel + 3] = 255;
+                }
+                encoder.Submit(frame);
+                encoder.Finish(1);
+            }
+            var metadata = Probe(probe,
+                "-v error -select_streams v:0 -show_entries stream=codec_name,profile,pix_fmt -of default=noprint_wrappers=1 \""
+                + output + "\"");
+            var expectedProfile = profile == ProResProfile.FourFourFourFourXQ ? "XQ"
+                : ProResProfiles.DisplayName(profile);
+            Assert(metadata.Contains("codec_name=prores")
+                && metadata.Contains("profile=" + expectedProfile),
+                "Wrong ProRes profile: " + ProResProfiles.DisplayName(profile) + ".");
+            Assert(metadata.Contains(ProResProfiles.HasAlpha(profile) ? "pix_fmt=yuva444p12le" : "pix_fmt=yuv422p10le"),
+                "Wrong software ProRes pixel format for " + ProResProfiles.DisplayName(profile) + ".");
+        }
+        var tone = Path.Combine(directory, "prores-tone.wav");
+        var muxed = Path.Combine(directory, "prores-with-audio.mov");
+        Probe(ffmpeg, "-v error -f lavfi -i sine=frequency=440:sample_rate=48000:duration=1 -ac 2 -c:a pcm_f32le \""
+            + tone + "\"");
+        FFmpegEncoder.MuxAudio(ffmpeg, Path.Combine(directory, "prores-3.mov"), tone, muxed);
+        var muxedVideo = Probe(probe,
+            "-v error -select_streams v:0 -show_entries stream=codec_name,profile -of default=noprint_wrappers=1 \""
+            + muxed + "\"");
+        var muxedAudio = Probe(probe,
+            "-v error -select_streams a:0 -show_entries stream=codec_name -of default=noprint_wrappers=1 \""
+            + muxed + "\"");
+        Assert(muxedVideo.Contains("codec_name=prores") && muxedVideo.Contains("profile=HQ")
+            && muxedAudio.Contains("codec_name=aac"), "ProRes MOV audio mux failed.");
+        if (string.Equals(Environment.GetEnvironmentVariable("ORBIT_RENDER_TEST_PRORES_HARDWARE"), "1",
+            StringComparison.Ordinal))
+        {
+            foreach (ProResProfile profile in Enum.GetValues(typeof(ProResProfile)))
+            {
+                var pixelFormat = ProResProfiles.HasAlpha(profile) ? "bgra" : "p210le";
+                Assert(FFmpegEncoder.TryValidateVideo(ffmpeg, 18, "fast", "prores_videotoolbox", pixelFormat,
+                    ".mov", false, out var hardwareError, profile),
+                    "Hardware ProRes " + ProResProfiles.DisplayName(profile) + " preflight failed: " + hardwareError);
+            }
+        }
     }
 
     private sealed class CodecCase
